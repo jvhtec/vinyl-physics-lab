@@ -8,6 +8,7 @@
 
 Research, first-stage validation and open questions: [docs/research/FOUNDATION.md](docs/research/FOUNDATION.md).
 The engineering workbench and its measured limits: [docs/research/LAB-WORKBENCH.md](docs/research/LAB-WORKBENCH.md).
+The post-cut sampled acceleration limiter and fidelity A/B: [docs/research/ACCELERATION-BOUND.md](docs/research/ACCELERATION-BOUND.md).
 Development handoff: [docs/HANDOFF-2026-11-13.md](docs/HANDOFF-2026-11-13.md).
 This repository is an upstream-linked **public fork**. A sparse source checkout may omit
 `assets/` and `records/`: `npm test` still works, but `npm run build` requires
@@ -29,9 +30,11 @@ record-player scene. It provides:
 - Electrical cartridge magnitude and phase plots, comparing the continuous
   R/L/C network with the actual bilinear AudioWorklet filter. The MM profiles,
   cable capacitance and resistive load are synchronized with the deck.
-- A deterministic stereo test cutting bench (1 kHz lateral, 100 Hz vertical
-  and 16 kHz left only). Editable reference velocity, elliptical filter and
-  high-frequency limiter target are passed to a dedicated analysis worker.
+- A deterministic stereo test cutting bench (1 kHz lateral, 100 Hz vertical,
+  6 kHz and 16 kHz left only). Editable reference velocity, elliptical filter and
+  sampled wall-acceleration target are passed to a dedicated analysis worker.
+- Original vs bounded-cut A/B for actual output-wall acceleration, gain,
+  phase, harmonics where Nyquist permits, and residual signal error.
 - Measured lateral/vertical groove displacement, wall velocity/acceleration,
   variable pitch, minimum adjacent-groove land and a 15 µm model land target.
 - CSV exports for analytical cartridge curves and clean-cut waveforms/pitch.
@@ -40,7 +43,12 @@ The `?lab` mode makes a short **5-second synthetic reference record** so it
 works without the multi-hundred-megabyte precompiled media checkout. The
 regular site still uses the original record shelf. This lab is **not**
 calibrated to cutter-head hardware or a lacquer manufacturing process.
-Notably, its existing de-esser does *not* enforce a strict acceleration ceiling.
+The upstream de-esser does **not** enforce a hard output acceleration ceiling.
+This fork now applies a **separate post-cut guard** by default, bounding
+second-difference acceleration on the sampled geometry. For historical A/B,
+use the documented `cut(..., { accelMode: 'legacy' })` option. The new
+guard does **not** guarantee intersample/continuous-time acceleration or
+safe physical cutting.
 
 A record player simulated "from the groove up" in the browser: **[vinyl-gl.vercel.app](https://vinyl-gl.vercel.app)**.
 

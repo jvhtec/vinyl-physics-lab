@@ -124,13 +124,27 @@ export function setupLab({ readPlayback, updatePlayback }) {
   // the data. Changing a parameter does not relabel an older plot as new data.
   function showCut(result) {
     cutResult = result;
-    const { stats, opts, scenario } = result;
+    const { stats, opts, scenario, legacyStats, comparison } = result;
     const land = stats.clearanceEvaluated ? display(stats.minLandUm, 2) + ' µm' : 'not evaluated';
     $('lab-cut-meta').textContent =
-      `${CUT_SCENARIOS[scenario].label} · ${display(stats.programSeconds)} s · ${stats.sampleRate} Hz · Vref ${opts.cutPeak} m/s · elliptic ${opts.ellipticalHz} Hz · HF target ${opts.aMax} m/s²`;
+      `${CUT_SCENARIOS[scenario].label} · ${display(stats.programSeconds)} s · ${stats.sampleRate} Hz · Vref ${opts.cutPeak} m/s · elliptic ${opts.ellipticalHz} Hz · sampled accel target ${opts.aMax} m/s²`;
     $('lab-cut-stats').textContent =
       `Min adjacent-groove land: ${land} (model target ${display(stats.minRequiredLandUm, 0)} µm)   |   Max lateral: ${display(stats.peakLateralUm)} µm   |   Max vertical: ${display(stats.peakVerticalUm)} µm\n` +
       `Peak wall velocity: ${display(stats.peakWallVelocityCms)} cm/s   |   Peak wall acceleration: ${display(stats.peakWallAccelerationMs2, 0)} m/s²   |   HF attenuation: ${display(stats.deEssDb)} dB`;
+    const guard = comparison.boundedAcceleration;
+    const ch = (c) => {
+      const r = comparison.channels[c];
+      const v = n => n == null ? 'N/A' : display(n, 3);
+      return `${c.padEnd(5)}  Δgain ${v(r.gainDeltaDb)} dB   Δphase ${v(r.phaseShiftDeg)}°   ` +
+        `THD legacy/bounded: ${v(r.thdBeforeDb)} / ${v(r.thdAfterDb)} dB   ` +
+        `AC residual legacy/bounded: ${v(r.residualBeforeDb)} / ${v(r.residualAfterDb)} dB`;
+    };
+    $('lab-cut-comparison').textContent =
+      `LEGACY → GUARDED  ${display(legacyStats.peakWallAccelerationMs2, 1)} → ${display(stats.peakWallAccelerationMs2, 1)} m/s²   ` +
+      `(${guard.mode}; high-band gain ${display(guard.highGain, 4)}, global gain ${display(guard.uniformGain, 4)})\n` +
+      ch('left') + '\n' + ch('right') +
+      (comparison.harmonicMeasurementAvailable ? '' :
+        '\nTHD unavailable: the second harmonic lies above the measurable Nyquist band.');
     const ticks = (s) => {
       if (!s.length) return [];
       return [s[0], s[Math.floor(s.length / 2)], s.at(-1)].map(v => ({ value: v.revolution, label: String(v.revolution) }));
@@ -147,6 +161,16 @@ export function setupLab({ readPlayback, updatePlayback }) {
       series: [{ key: 'pitchUm', color: palette.a }, { key: 'minLandUm', color: palette.b },
         { key: 'landTargetUm', color: 'rgba(255,255,255,.45)', dashed: true }],
     });
+    chart($('lab-acceleration'), {
+      rows: comparison.accelerationWaveform, xKey: 'timeMs', xLabel: 'Time (ms)',
+      yLabel: 'Sampled |wall acceleration| (m/s²)',
+      xTicks: [comparison.accelerationWaveform[0],
+        comparison.accelerationWaveform[Math.floor(comparison.accelerationWaveform.length / 2)],
+        comparison.accelerationWaveform.at(-1)].map(x => ({ value: x.timeMs, label: display(x.timeMs, 2) })),
+      series: [{ key: 'legacyAcceleration', color: palette.a },
+        { key: 'boundedAcceleration', color: palette.b },
+        { key: 'targetAcceleration', color: 'rgba(255,255,255,.5)', dashed: true }],
+    });
     $('lab-export-cut').disabled = false;
   }
   $('lab-run').addEventListener('click', () => {
@@ -161,10 +185,12 @@ export function setupLab({ readPlayback, updatePlayback }) {
         if (m.t === 'testCutDone') {
           showCut(m);
           const exceeded = m.stats.peakWallAccelerationMs2 > m.opts.aMax;
+          const originalExceeded = m.legacyStats.peakWallAccelerationMs2 > m.opts.aMax;
           const collision = m.stats.clearanceEvaluated &&
             m.stats.minLandUm < m.stats.minRequiredLandUm;
           $('lab-cut-status').textContent =
-            (exceeded ? '⚠ Measured acceleration EXCEEDS the limiter target. ' : '') +
+            (exceeded ? '⚠ Bounded acceleration still EXCEEDS target. ' :
+              originalExceeded ? 'Original limiter overshoot corrected in the sampled domain. ' : '') +
             (collision ? '⚠ Model land clearance below target. ' : '') +
             'Clean-cut diagnostics only, not a safe cutting prescription.';
         } else $('lab-cut-status').textContent = 'Test cut failed: ' + m.error;
@@ -192,16 +218,17 @@ export function setupLab({ readPlayback, updatePlayback }) {
   });
   $('lab-export-cut').addEventListener('click', () => {
     if (!cutResult) return;
-    const { stats, scenario, opts } = cutResult;
+    const { stats, scenario, opts, legacyStats, comparison } = cutResult;
     const rows = [
       ...stats.waveform.map(v => ({ kind: 'waveform', ...v })),
       ...stats.pitch.map(v => ({ kind: 'pitch', ...v })),
+      ...comparison.accelerationWaveform.map(v => ({ kind: 'acceleration', ...v })),
     ];
     downloadCsv('groove-test-cut.csv',
       '# Vinyl Physics Lab, CLEAN simulated cut, not calibrated for cutting hardware\r\n' +
       `# scenario=${scenario},cutPeak_mps=${opts.cutPeak},elliptical_Hz=${opts.ellipticalHz},accelLimit_mps2=${opts.aMax}\r\n` +
-      `# minLand_um=${stats.minLandUm ?? 'N/A'},peakLateral_um=${stats.peakLateralUm},peakVertical_um=${stats.peakVerticalUm},peakWallAccel_mps2=${stats.peakWallAccelerationMs2}\r\n` +
-      exportCsv(rows, ['kind', 'timeMs', 'lateralUm', 'verticalUm', 'revolution', 'radiusMm', 'pitchUm', 'minLandUm', 'landTargetUm']));
+      `# minLand_um=${stats.minLandUm ?? 'N/A'},peakLateral_um=${stats.peakLateralUm},peakVertical_um=${stats.peakVerticalUm},legacyAccel_mps2=${legacyStats.peakWallAccelerationMs2},boundedAccel_mps2=${stats.peakWallAccelerationMs2},guardMode=${comparison.boundedAcceleration.mode}\r\n` +
+      exportCsv(rows, ['kind', 'timeMs', 'lateralUm', 'verticalUm', 'revolution', 'radiusMm', 'pitchUm', 'minLandUm', 'landTargetUm', 'legacyAcceleration', 'boundedAcceleration', 'targetAcceleration']));
   });
   return { open: () => {
     setFromPlayback();

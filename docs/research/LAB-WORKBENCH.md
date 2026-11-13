@@ -54,31 +54,32 @@ physical lacquer-cutting feasibility.
 With all default cutter controls (wall reference velocity 0.14 m/s,
 elliptical corner 150 Hz, acceleration target 12,000 m/s²):
 
-| Synthetic programme | Peak lateral | Peak vertical | Min model land | Peak wall acceleration | HF attenuation |
+| Synthetic programme | Peak lateral | Peak vertical | Min model land | Original / bounded sampled acceleration | Upstream HF attenuation |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 kHz lateral, L = R | ~31.67 µm | 0 µm | ~116.95 µm | ~881 m/s² | 0 dB |
-| 100 Hz vertical, L = -R | 0 µm | ~68.29 µm | ~84.99 µm | ~12 m/s² | 0 dB |
-| 16 kHz left only | ~3.15 µm | ~3.05 µm | ~85.10 µm | **~30,309 m/s²** | ~14.25 dB |
+| 1 kHz lateral, L = R | ~31.67 µm | 0 µm | ~116.95 µm | ~881 / 881 m/s² | 0 dB |
+| 100 Hz vertical, L = -R | 0 µm | ~68.29 µm | ~84.99 µm | ~12 / 12 m/s² | 0 dB |
+| 16 kHz left only (bounded geometry) | ~1.24 µm | ~1.20 µm | ~85.04 µm | **~30,309 / 11,940 m/s²** | ~14.25 dB |
 
 Values refer to the **simulated clean cut at 48 kHz** using the current
 source model, not physical measurements. Numerical tolerances and
 45/45 sign conventions have regression coverage.
 
-### Important falsification: acceleration target is not a hard ceiling
+### Important falsification: the original de-esser's target was not a hard ceiling
 
 The original `cut.js` applies `deEss()` to a band above approximately
 3 kHz *before* integrating the RIAA-preemphasized signal into wall
 displacement. For a 16 kHz left-channel stimulus, the resulting wall
 acceleration by second finite difference is approximately **2.53 times**
-the requested 12,000 m/s² target. De-essing is active, but the
-output does not obey that ceiling. The panel explicitly warns whenever
-the actual computed wall acceleration exceeds the requested setting.
-We have **not** altered `deEss()` or called it a cutting safety limiter.
+the requested 12,000 m/s² target. De-essing was active, but the
+output did not obey that ceiling. In round 3 a *separate output guard*
+now reduces the sampled second-difference acceleration to about 11,940 m/s².
+We have **not** altered the original `deEss()` nor claimed physical
+cutter safety. For reproducibility, `accelMode: 'legacy'` retains the
+original failure. See [ACCELERATION-BOUND.md](ACCELERATION-BOUND.md).
 
-Next experiment: instrument the pre- and post-RIAA highband transfer,
-find the envelope/normalization discrepancy, and enforce an explicit
-post-cut geometrical acceleration constraint with repeatable energy
-and distortion tests before considering physical cutting parameters.
+Next experiment: calibrate a true cutter-head/drive-amp transfer and
+measure reconstructed intersample acceleration instead of relying on
+finite differences at the original 48 kHz sampling rate.
 
 ## CSV data contract
 
@@ -86,8 +87,8 @@ and distortion tests before considering physical cutting parameters.
   `frequencyHz,analogueDb,digitalDb,analoguePhaseDeg,digitalPhaseDeg`;
   initial comment lines state R/L/C and internal sample rate.
 - `groove-test-cut.csv`: a single rectangular table, with `kind` of
-  `waveform` or `pitch` and columns
-  `timeMs,lateralUm,verticalUm,revolution,radiusMm,pitchUm,minLandUm,landTargetUm`;
+  `waveform`, `pitch` or `acceleration` and columns
+  `timeMs,lateralUm,verticalUm,revolution,radiusMm,pitchUm,minLandUm,landTargetUm,legacyAcceleration,boundedAcceleration,targetAcceleration`;
   metadata comments record the exact scenario and cutting control values.
 
 No source audio, manufactured cartridge presets, proprietary plugin data
@@ -95,8 +96,8 @@ or vendor binaries are committed.
 
 ## Next blocks
 
-1. Convert the overshoot discovery into a verified *output-constrained*
-   high-frequency cutter model, with waveform/phase error plots.
+1. Measure continuous-time interpolation peaks/true cutter-head force
+   against a calibrated system, not just the discrete output guard.
 2. Add a real audio-file cutting analysis path without duplicating
    full LP side wall arrays on the UI thread.
 3. Build a physical mechanical cartridge and cantilever resonance bench

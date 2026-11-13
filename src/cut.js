@@ -3,6 +3,7 @@
 // (right channel) of a 45/45 stereo groove, sampled uniformly in groove angle, plus the spiral
 // radius table. Sample index i <-> groove angle theta = 2*pi*i/spr <-> time i/fs at 33 1/3 rpm.
 import { TAU, T1, T2, T3, G1K, onePole } from './dsp.js';
+import { boundWallAcceleration, maxWallAcceleration } from './acceleration-guard.js';
 import {
   REV_SECONDS, R_LEADIN, R_PROGRAM, R_PROGRAM_MIN, R_LOCK, GROOVE_W, LAND_MIN, TAB_PER_REV,
 } from './geometry.js';
@@ -94,6 +95,9 @@ export function cut(tracks, fs, o = {}) {
   const spr = fs * REV_SECONDS;
   const cutPeak = o.cutPeak ?? 0.14;           // wall velocity (m/s) of a full-scale 1 kHz tone
   const aMax = o.aMax ?? 12000;                // wall acceleration limit (m/s^2)
+  if (o.accelMode != null && !['legacy', 'uniform', 'selective'].includes(o.accelMode)) {
+    throw new RangeError('accelMode must be legacy, uniform or selective');
+  }
   const leadIn = Math.round(3 * spr), gap = Math.round(2 * spr), tail = Math.round(1 * spr);
   let P = leadIn + tail;
   for (const t of tracks) P += t.L.length;
@@ -125,6 +129,16 @@ export function cut(tracks, fs, o = {}) {
   emphasiseAndIntegrate(xb, fs, scale);
   for (let i = 0; i < P; i++) xb[i] = -xb[i];   // outer wall moves opposite so L=R cuts laterally
   depthControl(xa, xb, fs, o.zMax ?? 9e-6);
+  // This applies to the *actual groove geometry*, after RIAA, integration
+  // and vertical depth correction. The legacy de-esser above is a soft
+  // predictor; it cannot enforce the output's acceleration bound.
+  const acceleration = o.accelMode === 'legacy'
+    ? { mode: 'legacy', peakBefore: maxWallAcceleration(xa, xb, fs).peak,
+        peakAfter: null, target: aMax,
+        highGain: 1, uniformGain: 1, attenuationDb: 0 }
+    : boundWallAcceleration(xa, xb, fs, aMax,
+      { mode: o.accelMode === 'uniform' ? 'uniform' : 'selective' });
+  if (acceleration.mode === 'legacy') acceleration.peakAfter = acceleration.peakBefore;
 
   // --- variable pitch: pack the spiral using one revolution of preview ---
   const revsP = Math.ceil(P / spr);
@@ -182,7 +196,7 @@ export function cut(tracks, fs, o = {}) {
   if (truncated) { A.fill(0, P, n); B.fill(0, P, n); }
   return {
     fs, spr, n, wallIn: A.subarray(0, n), wallOut: B.subarray(0, n),
-    rTab, thetaEnd, thetaLock: thetaEnd - TAU, W: GROOVE_W, Vfs, deEssDb, truncated,
+    rTab, thetaEnd, thetaLock: thetaEnd - TAU, W: GROOVE_W, Vfs, deEssDb, acceleration, truncated,
     tracks: marks.filter((m) => m.i0 < P).map((m) => ({
       title: m.title, theta0: m.i0 * TAU / spr, theta1: Math.min(m.i1, P) * TAU / spr,
     })),

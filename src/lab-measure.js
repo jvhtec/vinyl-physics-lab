@@ -52,6 +52,7 @@ export function electricalSweep({ model = 'demo', capacitancePf = 200, resistanc
 export const CUT_SCENARIOS = Object.freeze({
   lateral: Object.freeze({ label: '1 kHz lateral (mono)', frequencyHz: 1000 }),
   vertical: Object.freeze({ label: '100 Hz vertical (L=-R)', frequencyHz: 100 }),
+  mid: Object.freeze({ label: '6 kHz left only (harmonics measurable)', frequencyHz: 6000 }),
   left: Object.freeze({ label: '16 kHz left only', frequencyHz: 16000 }),
 });
 export function testSignal(scenario = 'lateral', fs = 48000, seconds = 5) {
@@ -143,8 +144,116 @@ export function summarizeCleanCut(rec, { windowMs = 12 } = {}) {
     minRequiredLandUm: LAND_MIN * 1e6,
     peakLateralUm: peakLateral * 1e6, peakVerticalUm: peakVertical * 1e6,
     peakWallVelocityCms: peakVelocity * 100, peakWallAccelerationMs2: peakAcceleration,
-    pitch, waveform,
+    acceleration: rec.acceleration ?? null, pitch, waveform,
   };
+}
+
+// Lock-in analysis on an integer number of steady-state cycles of the
+// synthetic programme. Coherent complex amplitudes reveal magnitude/phase
+// changes separately from added harmonics. There are NO resolvable harmonics
+// for 16 kHz at 48 kHz: returning null is intentional, not a claimed 0% THD.
+export function measureCutTone(rec, frequencyHz, { offsetSeconds = 1, durationSeconds = 2 } = {}) {
+  const { fs, wallIn, wallOut } = rec;
+  const mark = rec.tracks?.[0];
+  if (!mark || !Number.isFinite(frequencyHz) || frequencyHz <= 0 || frequencyHz >= fs / 2) {
+    throw new RangeError('Expected a tone and its corresponding clean cut');
+  }
+  const start = Math.round(mark.theta0 * rec.spr / TAU + offsetSeconds * fs);
+  const end = Math.min(wallIn.length, Math.round(start + durationSeconds * fs),
+    Math.floor(mark.theta1 * rec.spr / TAU));
+  const n = end - start;
+  if (n < fs / 4 || Math.abs(frequencyHz * n / fs - Math.round(frequencyHz * n / fs)) > 1e-6) {
+    throw new RangeError('Tone analysis requires an integer number of cycles');
+  }
+  const harmonic = (signal, multiple) => {
+    const frequency = multiple * frequencyHz, omega = TAU * frequency / fs;
+    let re = 0, im = 0, total = 0, sum = 0;
+    for (let i = start; i < end; i++) {
+      const y = signal[i];
+      re += y * Math.cos(omega * (i - start));
+      im -= y * Math.sin(omega * (i - start));
+      total += y * y;
+      sum += y;
+    }
+    const factor = 2 / n;
+    return { re: re * factor, im: im * factor, amplitude: Math.hypot(re, im) * factor,
+      acRms: Math.sqrt(Math.max(0, total / n - (sum / n) ** 2)) };
+  };
+  const analyze = (signal) => {
+    const fundamental = harmonic(signal, 1);
+    let power = 0, harmonics = 0;
+    for (let h = 2; h * frequencyHz < fs * 0.45; h++) {
+      const v = harmonic(signal, h).amplitude;
+      power += v * v;
+      harmonics++;
+    }
+    // THD can't be inferred if all harmonics are at/above the usable Nyquist.
+    const thdDb = harmonics && fundamental.amplitude > 1e-20
+      ? 10 * Math.log10(power / (fundamental.amplitude ** 2) + 1e-30)
+      : null;
+    // Residual includes all modulation/noise/distortion not explained by the
+    // fundamental, not just harmonic products (relevant to the 16 kHz case).
+    const unexplainedRms = Math.sqrt(Math.max(0,
+      fundamental.acRms ** 2 - fundamental.amplitude ** 2 / 2));
+    const residualDb = fundamental.amplitude > 1e-20
+      ? 20 * Math.log10(Math.max(unexplainedRms, 1e-20) /
+        (fundamental.amplitude / Math.SQRT2)) : null;
+    return { ...fundamental, phaseDeg: Math.atan2(fundamental.im, fundamental.re) * 180 / Math.PI,
+      thdDb, residualDb };
+  };
+  return { left: analyze(wallIn), right: analyze(wallOut), frequencyHz, cycles: frequencyHz * n / fs };
+}
+
+export function compareCleanCuts(legacy, bounded, frequencyHz) {
+  if (legacy.fs !== bounded.fs || legacy.spr !== bounded.spr) {
+    throw new RangeError('Cut comparison requires equal sample rate and rotational mapping');
+  }
+  const before = measureCutTone(legacy, frequencyHz);
+  const after = measureCutTone(bounded, frequencyHz);
+  const channels = {};
+  for (const channel of ['left', 'right']) {
+    const a = before[channel], b = after[channel];
+    // Phase is undefined for a vanishing channel. Do not report an unstable
+    // angle as a physical phase shift for an absent stereo component.
+    const usable = a.amplitude > Math.max(before.left.amplitude, before.right.amplitude) * 1e-4;
+    let phaseShiftDeg = usable
+      ? Math.atan2(Math.sin((b.phaseDeg - a.phaseDeg) * Math.PI / 180),
+        Math.cos((b.phaseDeg - a.phaseDeg) * Math.PI / 180)) * 180 / Math.PI
+      : null;
+    if (phaseShiftDeg != null && Math.abs(phaseShiftDeg) < 1e-12) phaseShiftDeg = 0;
+    channels[channel] = {
+      amplitudeBefore: a.amplitude, amplitudeAfter: b.amplitude,
+      gainDeltaDb: usable && b.amplitude > 0 ? 20 * Math.log10(b.amplitude / a.amplitude) : null,
+      phaseShiftDeg, thdBeforeDb: a.thdDb, thdAfterDb: b.thdDb,
+      residualBeforeDb: a.residualDb, residualAfterDb: b.residualDb,
+    };
+  }
+  return { channels, harmonicMeasurementAvailable: frequencyHz * 2 < legacy.fs * 0.45,
+    frequencyHz, legacyAcceleration: legacy.acceleration, boundedAcceleration: bounded.acceleration };
+}
+
+export function accelerationOverlay(legacy, bounded, { windowMs = 6, points = 512 } = {}) {
+  if (legacy.fs !== bounded.fs) throw new RangeError('Sample rates differ');
+  const fs = legacy.fs;
+  const track = legacy.tracks[0];
+  const from = Math.round(track.theta0 * legacy.spr / TAU + fs);
+  const count = Math.max(2, Math.round(windowMs * 0.001 * fs));
+  const stride = Math.max(1, Math.ceil(count / points));
+  const rows = [];
+  const accel = (rec, i) => {
+    const { wallIn: a, wallOut: b } = rec;
+    return Math.max(
+      Math.abs((a[i + 1] - 2 * a[i] + a[i - 1]) * fs * fs),
+      Math.abs((b[i + 1] - 2 * b[i] + b[i - 1]) * fs * fs));
+  };
+  for (let j = 0; j < count; j += stride) {
+    const i = from + j;
+    rows.push({ timeMs: j * 1000 / fs,
+      legacyAcceleration: accel(legacy, i),
+      boundedAcceleration: accel(bounded, i),
+      targetAcceleration: bounded.acceleration?.target ?? null });
+  }
+  return rows;
 }
 
 export function exportCsv(rows, columns) {

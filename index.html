@@ -277,21 +277,24 @@
   </section>
   <section class="lab-panel">
     <h2>02 / Cutting head · simulated test cut</h2>
-    <p class="lab-note">Runs a fresh synthetic stereo test signal through the original Vinyl GL cutter in a separate worker. Plots measure the <em>clean groove</em> before pressing. Adjacent-groove land uses matching groove angles one revolution apart. No thermal, servo or lacquer process calibration is implied.</p>
+    <p class="lab-note">Cuts identical synthetic stereo signals through the original limiter and the new post-cut acceleration guard, comparing the <em>clean groove</em> before pressing. The guard bounds sampled wall curvature, not continuous-time intersample acceleration or physical cutter-head limits. No thermal, servo or lacquer-process calibration is implied.</p>
     <div class="lab-controls">
-      <label>Stimulus <select id="lab-scenario"><option value="lateral">1 kHz lateral</option><option value="vertical">100 Hz vertical</option><option value="left">16 kHz left only</option></select></label>
+      <label>Stimulus <select id="lab-scenario"><option value="lateral">1 kHz lateral</option><option value="vertical">100 Hz vertical</option><option value="mid">6 kHz left only</option><option value="left">16 kHz left only</option></select></label>
       <label>Wall reference <input id="lab-velocity" type="range" min=".05" max=".25" step=".01" value=".14"><output id="lab-velocity-value"></output></label>
       <label>Elliptical EQ <input id="lab-elliptical" type="range" min="40" max="400" step="10" value="150"><output id="lab-elliptical-value"></output></label>
-      <label>HF limiter target <input id="lab-accel" type="range" min="4000" max="20000" step="1000" value="12000"><output id="lab-accel-value"></output></label>
+      <label>Sampled wall accel. target <input id="lab-accel" type="range" min="1000" max="20000" step="1000" value="12000"><output id="lab-accel-value"></output></label>
     </div>
     <div class="lab-actions"><button id="lab-run">Run test cut</button><button id="lab-export-cut" disabled>Export cut CSV</button><span id="lab-cut-status" role="status">Run a test cut to measure groove geometry.</span></div>
     <p id="lab-cut-meta" class="lab-note"></p>
     <p id="lab-cut-stats" class="lab-metrics">No test cut analysed yet.</p>
+    <p id="lab-cut-comparison" class="lab-metrics"></p>
     <div class="lab-legend"><b class="la">━ Lateral / pitch</b><b class="lb">━ Vertical / minimum land</b><b>┄ Land target</b></div>
     <div class="lab-plots">
       <canvas id="lab-waveform" width="860" height="260" aria-label="Clean groove lateral and vertical displacement"></canvas>
       <canvas id="lab-pitch" width="860" height="260" aria-label="Variable groove pitch by revolution"></canvas>
     </div>
+    <p class="lab-note">Legacy vs bounded sampled wall acceleration. The horizontal target is for sampled geometry only, not continuous-time cutter-head acceleration.</p>
+    <canvas id="lab-acceleration" width="1720" height="290" aria-label="Legacy and corrected groove acceleration measured from output geometry"></canvas>
   </section>
 </section>
 

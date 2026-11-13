@@ -3,7 +3,7 @@ import { cut } from '../src/cut.js';
 import { LAND_MIN, TAB_PER_REV, GROOVE_W } from '../src/geometry.js';
 import { cartridgeBiquad } from '../src/cartridge-electrical.js';
 import {
-  electricalSweep, biquadResponse, testSignal, summarizeCleanCut, exportCsv,
+  electricalSweep, biquadResponse, testSignal, summarizeCleanCut, compareCleanCuts, exportCsv,
 } from '../src/lab-measure.js';
 
 const near = (got, expected, tolerance = 1e-6) =>
@@ -52,17 +52,25 @@ simple.wallIn.fill(-4e-6); simple.wallOut.fill(-3e-6);
 measured = summarizeCleanCut(simple);
 near(measured.minLandUm, 40 - Math.SQRT2 * 7, .01);
 
-// C) The cutter is not yet a safety-rated acceleration limiter. The 16 kHz
-// diagnostic deliberately exposes (and retains) measured overshoot.
+// C) Default bench output is now bounded in the SAMPLED domain, while legacy
+// remains available to reproduce the original failed prediction.
 const lateral = summarizeCleanCut(cut(testSignal('lateral', fs), fs));
 const vertical = summarizeCleanCut(cut(testSignal('vertical', fs), fs));
-const high = summarizeCleanCut(cut(testSignal('left', fs), fs));
+const original = cut(testSignal('left', fs), fs, { accelMode: 'legacy' });
+const bounded = cut(testSignal('left', fs), fs);
+const high = summarizeCleanCut(bounded);
 assert.ok(lateral.peakLateralUm > 15 && lateral.peakVerticalUm < 1e-4);
 assert.ok(vertical.peakVerticalUm > 20 && vertical.peakLateralUm < 1e-4);
 assert.ok(high.peakLateralUm > 0 && high.peakVerticalUm > 0);
 assert.ok(lateral.pitch.length > 1 && lateral.clearanceEvaluated);
 assert.ok(lateral.minLandUm >= LAND_MIN * 1e6, 'Nominal synthetic lateral cut preserves model land');
-assert.ok(high.peakWallAccelerationMs2 > 12000, 'Expose the current de-esser target overshoot');
+assert.ok(original.acceleration.peakAfter > 30000, 'Legacy must still reproduce the failing 16k cut');
+assert.ok(high.peakWallAccelerationMs2 <= 12000, 'New output guard must bound the 16k cut');
+assert.equal(bounded.acceleration.mode, 'selective');
+const change16 = compareCleanCuts(original, bounded, 16000);
+assert.ok(Math.abs(change16.channels.left.phaseShiftDeg) < .01, 'Zero-phase guard should not shift the 16k tone');
+assert.equal(change16.harmonicMeasurementAvailable, false, 'Do not invent 16k THD at 48 kHz');
+assert.equal(change16.channels.left.thdAfterDb, null);
 assert.ok(high.deEssDb > 0);
 
 // D) Machine-readable export includes units in column names and standard CSV

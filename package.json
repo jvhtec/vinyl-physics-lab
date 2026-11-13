@@ -11,7 +11,7 @@
     "dev": "node scripts/serve.mjs",
     "build": "node build.mjs",
     "lathe": "node lathe.mjs all",
-    "test": "node test/cartridge-electrical.mjs && node test/lab-measure.mjs && node test/basic.mjs && node test/response.mjs && node test/noise.mjs && node test/scenario.mjs",
+    "test": "node test/cartridge-electrical.mjs && node test/lab-measure.mjs && node test/acceleration-guard.mjs && node test/basic.mjs && node test/response.mjs && node test/noise.mjs && node test/scenario.mjs",
     "bench": "node test/bench.mjs"
   }
 }
