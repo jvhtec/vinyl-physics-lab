@@ -180,13 +180,15 @@ if (!OG) initAudio().catch(() => {});   // best effort before any gesture; the c
 function setMotor(on) { S.motor = on; send({ t: 'motor', on }); $('b-start').textContent = on ? 'Stop' : 'Start'; $('b-start').classList.toggle('on', on); }
 function pushParams() {
   // 100% on the slider is 2 dB under unity: the cartridge lifts the treble by up to 1.9 dB, and bright peaks would clip
-  send({ t: 'set', volume: 0.8 * +$('p-volume').value, stylus: $('p-stylus').value, vtf: +$('p-vtf').value, antiskate: +$('p-antiskate').value, hum: +$('p-hum').value });
+  send({ t: 'set', volume: 0.8 * +$('p-volume').value, stylus: $('p-stylus').value, vtf: +$('p-vtf').value, antiskate: +$('p-antiskate').value, hum: +$('p-hum').value,
+    cartridgeModel: $('p-cartridge').value, capacitance: +$('p-capacitance').value, loadResistanceKOhm: +$('p-load').value });
 }
 for (const el of document.querySelectorAll('#ctl input[type=range]')) {
-  const out = el.parentElement.querySelector('output'), show = () => { out.textContent = el.id === 'p-volume' ? Math.round(el.value * 100) + '%' : (+el.value).toFixed(2); };
+  const out = el.parentElement.querySelector('output'), show = () => { out.textContent = el.id === 'p-volume' ? Math.round(el.value * 100) + '%' : el.id === 'p-capacitance' ? el.value + ' pF' : el.id === 'p-load' ? el.value + ' kΩ' : (+el.value).toFixed(2); };
   el.addEventListener('input', () => { show(); if (el.id.startsWith('p-')) pushParams(); }); show();
 }
 $('p-stylus').addEventListener('change', pushParams);
+$('p-cartridge').addEventListener('change', pushParams);
 const toggle = (btn, panel, onChange) => $(btn).addEventListener('click', () => {
   const open = $(panel).hidden; $(panel).hidden = !open; $(btn).setAttribute('aria-pressed', String(open)); if (onChange) onChange(open);
 });

@@ -4,6 +4,7 @@ import { TAU, makePolyphase, makeLowpass, bilinear, riaaPlayback, rng } from './
 import { W33, ALPHA_REST, ALPHA_MIN, grooveRadius } from './geometry.js';
 import { GrooveReader } from './groove.js';
 import { process, DT, PH, WLEN } from './engine-core.js';
+import { MM_ELECTRICAL_PRESETS, cartridgeBiquad } from './cartridge-electrical.js';
 
 const G = 9.80665;
 const E_VINYL = 3.4e9;            // reduced modulus E/(1-nu^2) of PVC against diamond (Pa)
@@ -39,6 +40,7 @@ export class Engine {
       Lc: 0.45, Rc: 600, Cl: 200e-12, Rl: 47000,            // cartridge coil + cable + preamp load
       volume: 1, hum: 0, rumble: 1, flutter: 1, preNoise: 1e-5,
     };
+    this.cartridgeModel = 'demo';
     this.setAntiskate(1.8);
     this.vtfS = this.p.vtf;
     this.setStylus('elliptical');
@@ -71,9 +73,7 @@ export class Engine {
   // dial is calibrated like a real one: the setting that matches the tracking force cancels skating
   setAntiskate(grams) { this.p.antiskate = 0.115 * grams * 1e-3 * G; }
   updateElectrical() {
-    const { Lc, Rc, Cl, Rl } = this.p;
-    const k = 1 + Rc / Rl;
-    this.lcr = bilinear([1, 0, 0], [1, (Lc / Rl + Rc * Cl) / k, Lc * Cl / k], this.fsF);
+    this.lcr = cartridgeBiquad(this.fsF, this.p);
   }
   setRecord(rec) {
     this.rec = rec; this.reader.setRecord(rec); this.wj0 = -1e9; this.gn = 0;
@@ -83,7 +83,20 @@ export class Engine {
     if (o.vtf != null) this.setVtf(o.vtf);
     if (o.antiskate != null) this.setAntiskate(o.antiskate);
     for (const k of ['volume', 'hum', 'rumble', 'flutter']) if (o[k] != null) this.p[k] = o[k];
-    if (o.capacitance != null) { this.p.Cl = o.capacitance * 1e-12; this.updateElectrical(); }
+    let electricalChanged = false;
+    if (o.cartridgeModel != null && MM_ELECTRICAL_PRESETS[o.cartridgeModel]) {
+      this.cartridgeModel = o.cartridgeModel;
+      const { Lc, Rc } = MM_ELECTRICAL_PRESETS[o.cartridgeModel];
+      this.p.Lc = Lc; this.p.Rc = Rc;
+      electricalChanged = true;
+    }
+    if (o.capacitance != null && Number.isFinite(o.capacitance) && o.capacitance >= 0) {
+      this.p.Cl = o.capacitance * 1e-12; electricalChanged = true;
+    }
+    if (o.loadResistanceKOhm != null && Number.isFinite(o.loadResistanceKOhm) && o.loadResistanceKOhm > 0) {
+      this.p.Rl = o.loadResistanceKOhm * 1000; electricalChanged = true;
+    }
+    if (electricalChanged) this.updateElectrical();
   }
 
   // --- controls ---

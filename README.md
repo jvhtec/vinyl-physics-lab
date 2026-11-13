@@ -1,5 +1,17 @@
 # vinyl
 
+> **Vinyl Physics Lab fork**: [jvhtec/vinyl-physics-lab](https://github.com/jvhtec/vinyl-physics-lab), based on
+> [Guillermo Rauch's Vinyl GL](https://github.com/rauchg/vinyl). Original MIT copyright and
+> recording-specific licence notices remain intact. The extra cartridge controls in this fork
+> model **MM electrical loading only**, not calibrated end-to-end cartridges. They do not imply
+> that the software is safe for controlling a real cutter.
+
+Research, first-stage validation and open questions: [docs/research/FOUNDATION.md](docs/research/FOUNDATION.md).
+Development handoff: [docs/HANDOFF-2026-11-13.md](docs/HANDOFF-2026-11-13.md).
+This repository is an upstream-linked **public fork**. A sparse source checkout may omit
+`assets/` and `records/`: `npm test` still works, but `npm run build` requires
+the original pre-cut audio assets (roughly 335 MB across the upstream repository).
+
 A record player simulated "from the groove up" in the browser: **[vinyl-gl.vercel.app](https://vinyl-gl.vercel.app)**.
 
 Instead of playing an audio file, the music is cut into a spiral [groove](https://en.wikipedia.org/wiki/Phonograph_record), and a simulated [stylus](https://en.wikipedia.org/wiki/Phonograph#Stylus), cantilever, [tonearm](https://en.wikipedia.org/wiki/Phonograph#Arm_systems) and [cartridge](https://en.wikipedia.org/wiki/Magnetic_cartridge) read it back on the audio thread. What you hear is the voltage that motion would induce in the cartridge, after phono equalisation.

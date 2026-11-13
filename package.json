@@ -1,16 +1,16 @@
 {
   "name": "vinyl",
   "private": true,
-  "description": "A record player simulated from the groove up",
+  "description": "Vinyl physics laboratory: cutting, playback and cartridge experiments based on Vinyl GL",
   "license": "MIT",
-  "repository": "github:rauchg/vinyl",
+  "repository": "github:jvhtec/vinyl-physics-lab",
   "homepage": "https://vinyl-gl.vercel.app",
   "engines": { "node": ">=22" },
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
     "lathe": "node lathe.mjs all",
-    "test": "node test/basic.mjs && node test/response.mjs && node test/noise.mjs && node test/scenario.mjs",
+    "test": "node test/cartridge-electrical.mjs && node test/basic.mjs && node test/response.mjs && node test/noise.mjs && node test/scenario.mjs",
     "bench": "node test/bench.mjs"
   }
 }
