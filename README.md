@@ -7,10 +7,40 @@
 > that the software is safe for controlling a real cutter.
 
 Research, first-stage validation and open questions: [docs/research/FOUNDATION.md](docs/research/FOUNDATION.md).
+The engineering workbench and its measured limits: [docs/research/LAB-WORKBENCH.md](docs/research/LAB-WORKBENCH.md).
 Development handoff: [docs/HANDOFF-2026-11-13.md](docs/HANDOFF-2026-11-13.md).
 This repository is an upstream-linked **public fork**. A sparse source checkout may omit
 `assets/` and `records/`: `npm test` still works, but `npm run build` requires
 the original pre-cut audio assets (roughly 335 MB across the upstream repository).
+
+### Vinyl Physics Lab (fork-specific)
+
+On a Windows source-only checkout, Node 22+ is sufficient:
+
+```bash
+npm run dev
+# Open http://127.0.0.1:3000/?lab
+npm test
+```
+
+Use the **Lab** button to open a separate engineering panel over the original
+record-player scene. It provides:
+
+- Electrical cartridge magnitude and phase plots, comparing the continuous
+  R/L/C network with the actual bilinear AudioWorklet filter. The MM profiles,
+  cable capacitance and resistive load are synchronized with the deck.
+- A deterministic stereo test cutting bench (1 kHz lateral, 100 Hz vertical
+  and 16 kHz left only). Editable reference velocity, elliptical filter and
+  high-frequency limiter target are passed to a dedicated analysis worker.
+- Measured lateral/vertical groove displacement, wall velocity/acceleration,
+  variable pitch, minimum adjacent-groove land and a 15 µm model land target.
+- CSV exports for analytical cartridge curves and clean-cut waveforms/pitch.
+
+The `?lab` mode makes a short **5-second synthetic reference record** so it
+works without the multi-hundred-megabyte precompiled media checkout. The
+regular site still uses the original record shelf. This lab is **not**
+calibrated to cutter-head hardware or a lacquer manufacturing process.
+Notably, its existing de-esser does *not* enforce a strict acceleration ceiling.
 
 A record player simulated "from the groove up" in the browser: **[vinyl-gl.vercel.app](https://vinyl-gl.vercel.app)**.
 

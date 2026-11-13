@@ -1,5 +1,7 @@
 // UI: wires the renderer, the mastering worker and the audio-thread physics engine together.
 import { Renderer } from './render.js';
+import { setupLab } from './lab-ui.js';
+import { testSignal } from './lab-measure.js';
 import { TAU } from './dsp.js';
 import { RECORDS } from './records.js';
 import { press, makeVis } from './press.js';
@@ -113,6 +115,16 @@ async function loadPrecompiled(dir = 'assets/', me = pick, pressing = null) {   
 }
 function houseRecord() {                        // "Demo EP" on the shelf: assets/, or synthesised and mastered here
   S.workerHasSource = false;
+  if (new URLSearchParams(location.search).has('lab')) {
+    // Lab-only source checkout: a five-second test disc instead of generating
+    // the full several-minute demo EP or requiring any upstream audio assets.
+    const tracks = testSignal('lateral', 48000);
+    markRecord({ id: 'house', title: 'Bench Reference · 1 kHz', by: 'Synthetic', credit: 'Source-generated test disc' });
+    S.workerHasSource = true;
+    worker.postMessage({ t: 'tracks', fs: 48000, tracks, cond: condition() },
+      tracks.flatMap(({ L, R }) => [L.buffer, R.buffer]));
+    return;
+  }
   return loadPrecompiled().catch((err) => {     // not built (or stale): master it here instead
     console.info((err.message || err) + '; mastering in the browser');
     S.man = null; worker.postMessage({ t: 'demo', fs: 48000, cond: condition() });
@@ -189,14 +201,35 @@ for (const el of document.querySelectorAll('#ctl input[type=range]')) {
 }
 $('p-stylus').addEventListener('change', pushParams);
 $('p-cartridge').addEventListener('change', pushParams);
-const toggle = (btn, panel, onChange) => $(btn).addEventListener('click', () => {
-  const open = $(panel).hidden; $(panel).hidden = !open; $(btn).setAttribute('aria-pressed', String(open)); if (onChange) onChange(open);
+const lab = setupLab({
+  readPlayback: () => ({
+    model: $('p-cartridge').value, capacitancePf: +$('p-capacitance').value,
+    resistanceKOhm: +$('p-load').value, sampleRate: ctx?.sampleRate || 48000,
+  }),
+  updatePlayback: (p) => {
+    $('p-cartridge').value = p.model;
+    $('p-capacitance').value = p.capacitancePf;
+    $('p-load').value = p.resistanceKOhm;
+    for (const id of ['p-capacitance', 'p-load']) $(id).parentElement.querySelector('output').textContent =
+      $(id).value + (id === 'p-capacitance' ? ' pF' : ' kΩ');
+    pushParams();
+  },
 });
-toggle('t-ctl', 'ctl', (open) => { if (open && !$('shelf').hidden) $('t-records').click(); });      // one panel in that corner at a time
-toggle('t-records', 'shelf', (open) => { if (open && !$('ctl').hidden) $('t-ctl').click(); });
+for (const id of ['p-capacitance', 'p-load']) $(id).addEventListener('input', lab.onPlaybackChange);
+$('p-cartridge').addEventListener('change', lab.onPlaybackChange);
+const toggle = (btn, panel, onChange) => $(btn).addEventListener('click', () => {
+  const open = $(panel).hidden;
+  $(panel).hidden = !open;
+  $(btn).setAttribute('aria-pressed', String(open));
+  if (open) for (const [other, button] of PANELS) if (other !== panel && !$(other).hidden) $(button).click();
+  if (onChange) onChange(open);
+});
+toggle('t-ctl', 'ctl');
+toggle('t-records', 'shelf');
+toggle('t-lab', 'lab', (open) => { if (open) lab.open(); });
 // tapping anywhere outside an open panel closes it, and that tap does nothing else (it won't drop the needle
 // or grab the record), so the toggles and a tap on the scene both work as open / close; so does Escape
-const PANELS = [['ctl', 't-ctl'], ['shelf', 't-records']];
+const PANELS = [['ctl', 't-ctl'], ['shelf', 't-records'], ['lab', 't-lab']];
 addEventListener('pointerdown', (e) => {
   let closed = false;
   for (const [panel, btn] of PANELS) if (!$(panel).hidden && !$(panel).contains(e.target) && !$(btn).contains(e.target)) { $(btn).click(); closed = true; }
@@ -283,7 +316,9 @@ for (const r of RECORDS) {
   b.addEventListener('click', () => { pickRecord(r); b.blur(); });
   shelf.insertBefore(b, credit);
 }
-pickRecord(RECORDS.find((r) => r.id === (window.__boot?.id || 'rhapsody')) || RECORDS[0]);   // the record on the platter when the page opens
+const labMode = new URLSearchParams(location.search).has('lab');
+pickRecord(RECORDS.find((r) => r.id === (labMode ? 'house' : window.__boot?.id || 'rhapsody')) || RECORDS[0]);
+if (labMode) $('t-lab').click();  // source-only checkout can run the synthetic demo without bundled LP assets
 $('f-audio').addEventListener('change', (e) => cutFiles(e.target.files));
 addEventListener('dragover', (e) => e.preventDefault());
 addEventListener('drop', (e) => { e.preventDefault(); cutFiles(e.dataTransfer.files); });

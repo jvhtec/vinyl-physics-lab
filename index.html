@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Record Player</title>
+<link rel="icon" type="image/png" href="./og.png">
 <meta name="description" content="A physical simulation of how a record player makes sound: the music is cut into a groove and a simulated stylus reads it back.">
 <meta property="og:title" content="Record Player">
 <meta property="og:description" content="A physical simulation of how a record player makes sound. The music is cut into a groove and a simulated stylus reads it back.">
@@ -18,6 +19,7 @@
 <script>
 // Start downloading and decoding the opening record now, before any module has even been requested.
 (function () {
+  if (new URLSearchParams(location.search).has('lab')) return; // source-only dev mode: skip missing LP assets
   // phones get a short record first: a long side needs several hundred MB of memory once decoded
   var small = matchMedia('(max-width: 760px), (pointer: coarse)').matches;
   var id = small ? 'gymnopedie' : 'rhapsody', dir = 'assets/' + id + '/', b = window.__boot = { id: id, dir: dir, got: 0, total: 0 };
@@ -126,6 +128,32 @@
   #shelf button[aria-current=true] b { color: var(--acc); }
   #shelf p { margin: 8px 8px 4px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--dim); font-size: 11px; }
   #shelf a { color: var(--soft); }
+  /* Engineering mode is an overlay, not a replacement for the WebGL record player. */
+  #lab { top: 50px; right: 14px; width: min(850px, calc(100vw - 28px));
+    max-height: calc(100dvh - 90px); overflow: auto; box-sizing: border-box; z-index: 5; }
+  #lab[hidden] { display: none; }
+  #lab header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+  #lab h2 { font-size: 12px; margin: 5px 0; letter-spacing: .10em; color: var(--fg); }
+  #lab .lab-note { font-size: 11px; color: var(--dim); line-height: 1.55; margin: 6px 0 12px; }
+  #lab .lab-panel { padding: 10px 0 18px; border-top: 1px solid var(--line); }
+  #lab .lab-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 12px 0; }
+  #lab .lab-controls label { display: flex; align-items: center; gap: 7px; color: var(--soft); font-size: 11px; }
+  #lab .lab-controls select { max-width: 195px; }
+  #lab .lab-controls input[type=range] { width: 105px; }
+  #lab output { color: var(--acc); font: 11px var(--mono); min-width: 47px; }
+  #lab button, #lab select { font: 11px var(--mono); color: var(--fg);
+    background: rgba(255,255,255,.08); border: 1px solid var(--line); border-radius: 7px;
+    padding: 6px 10px; cursor: pointer; }
+  #lab button:hover, #lab select:hover { border-color: rgba(255,255,255,.3); }
+  #lab button:disabled { cursor: default; opacity: .45; }
+  #lab .lab-legend { color: var(--dim); font: 11px var(--mono); display: flex; gap: 12px; margin-bottom: 5px; }
+  #lab .lab-legend b { font-weight: 400; }
+  #lab .lab-legend .la { color: #ffbb6f; } #lab .lab-legend .lb { color: #80cfd4; }
+  #lab .lab-plots { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  #lab canvas { display: block; width: 100%; border: 1px solid var(--line); border-radius: 7px; }
+  #lab .lab-metrics { font: 11px/1.7 var(--mono); color: var(--soft); white-space: pre-wrap; }
+  #lab .lab-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+  #lab .lab-actions span { color: var(--dim); font: 11px var(--mono); }
   #scope { width: 100%; height: 62px; display: block; border-radius: 6px; }
   #stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 12px; margin-top: 8px; font: 10px/1.4 var(--mono); }
   #stats span { color: var(--dim); } #stats b { font-weight: 400; float: right; color: var(--soft); }
@@ -162,6 +190,9 @@
     #scope { height: 40px; }
     #stats { font-size: 9px; gap: 0 10px; margin-top: 5px; }
     #ctl, #shelf { width: min(236px, calc(100% - 28px)); top: calc(88px + env(safe-area-inset-top)); max-height: calc(100% - 164px); }
+    #lab { top: calc(88px + env(safe-area-inset-top)); max-height: calc(100dvh - 150px); padding: 10px; }
+    #lab .lab-plots { grid-template-columns: 1fr; }
+    #lab .lab-controls { gap: 10px; }
     #ctl { padding: 9px 10px; font-size: 11px; }          /* compact: leave most of the deck visible */
     #ctl h2 { margin: 9px 0 3px; font-size: 9px; }
     #ctl .row { margin: 3px 0; gap: 5px; }
@@ -183,6 +214,7 @@
 <nav id="toggles">
   <button id="t-records" aria-pressed="false" title="Records"><span class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span id="now-title">Records</span><span id="now-time"></span></button>
   <button id="t-ctl" aria-pressed="false">Controls</button>
+  <button id="t-lab" aria-pressed="false">Lab</button>
 </nav>
 
 <div id="credit"><button id="t-reset" hidden>Reset view</button><a href="https://x.com/rauchg" target="_blank" rel="noopener">@rauchg</a><a href="https://github.com/rauchg/vinyl" target="_blank" rel="noopener">Source</a></div>
@@ -224,6 +256,44 @@
 </section>
 
 <section id="shelf" class="panel" hidden></section>
+
+<section id="lab" class="panel" hidden aria-label="Vinyl Physics Lab measurement workbench">
+  <header><h2>VINYL PHYSICS LAB · MEASUREMENT BENCH</h2><span class="lab-note">Analytical models, not calibrated hardware</span></header>
+  <section class="lab-panel">
+    <h2>01 / Cartridge electrical response</h2>
+    <p class="lab-note">Series coil R + L into the parallel phono load R + C. Analogue transfer vs. the actual oversampled bilinear filter used in playback. Curves normalized to DC, not to manufacturer sensitivity. This does not include cantilever mechanics or generator output calibration.</p>
+    <div class="lab-controls">
+      <label>Electrical profile <select id="lab-model"><option value="demo">Vinyl GL demo MM</option><option value="ortofon2mred">Ortofon 2M Red</option><option value="atvm95e">AT-VM95E</option></select></label>
+      <label>Load C <input id="lab-cap" type="range" min="50" max="500" step="10" value="200"><output id="lab-cap-value"></output></label>
+      <label>Load R <input id="lab-rl" type="range" min="10" max="100" step="1" value="47"><output id="lab-rl-value"></output></label>
+    </div>
+    <p id="lab-electrical-meta" class="lab-note"></p>
+    <div class="lab-legend"><b class="la">━ Analogue reference</b><b class="lb">┄ Worklet biquad</b></div>
+    <div class="lab-plots">
+      <canvas id="lab-magnitude" width="860" height="260" aria-label="Frequency response in dB"></canvas>
+      <canvas id="lab-phase" width="860" height="260" aria-label="Electrical phase response in degrees"></canvas>
+    </div>
+    <div class="lab-actions"><button id="lab-export-cartridge">Export cartridge CSV</button></div>
+  </section>
+  <section class="lab-panel">
+    <h2>02 / Cutting head · simulated test cut</h2>
+    <p class="lab-note">Runs a fresh synthetic stereo test signal through the original Vinyl GL cutter in a separate worker. Plots measure the <em>clean groove</em> before pressing. Adjacent-groove land uses matching groove angles one revolution apart. No thermal, servo or lacquer process calibration is implied.</p>
+    <div class="lab-controls">
+      <label>Stimulus <select id="lab-scenario"><option value="lateral">1 kHz lateral</option><option value="vertical">100 Hz vertical</option><option value="left">16 kHz left only</option></select></label>
+      <label>Wall reference <input id="lab-velocity" type="range" min=".05" max=".25" step=".01" value=".14"><output id="lab-velocity-value"></output></label>
+      <label>Elliptical EQ <input id="lab-elliptical" type="range" min="40" max="400" step="10" value="150"><output id="lab-elliptical-value"></output></label>
+      <label>HF limiter target <input id="lab-accel" type="range" min="4000" max="20000" step="1000" value="12000"><output id="lab-accel-value"></output></label>
+    </div>
+    <div class="lab-actions"><button id="lab-run">Run test cut</button><button id="lab-export-cut" disabled>Export cut CSV</button><span id="lab-cut-status" role="status">Run a test cut to measure groove geometry.</span></div>
+    <p id="lab-cut-meta" class="lab-note"></p>
+    <p id="lab-cut-stats" class="lab-metrics">No test cut analysed yet.</p>
+    <div class="lab-legend"><b class="la">━ Lateral / pitch</b><b class="lb">━ Vertical / minimum land</b><b>┄ Land target</b></div>
+    <div class="lab-plots">
+      <canvas id="lab-waveform" width="860" height="260" aria-label="Clean groove lateral and vertical displacement"></canvas>
+      <canvas id="lab-pitch" width="860" height="260" aria-label="Variable groove pitch by revolution"></canvas>
+    </div>
+  </section>
+</section>
 
 <dialog id="more">
   <h3>A record player simulated "from the groove up"</h3>
