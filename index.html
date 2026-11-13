@@ -277,12 +277,12 @@
   </section>
   <section class="lab-panel">
     <h2>02 / Cutting head · simulated test cut</h2>
-    <p class="lab-note">Cuts identical synthetic stereo signals through the original limiter and the new post-cut acceleration guard, comparing the <em>clean groove</em> before pressing. The guard bounds sampled wall curvature, not continuous-time intersample acceleration or physical cutter-head limits. No thermal, servo or lacquer-process calibration is implied.</p>
+    <p class="lab-note">Cuts identical synthetic stereo signals through the original limiter and the new post-cut acceleration guard, comparing the <em>clean groove</em> before pressing. The guard uses 8-phase windowed-sinc displacement reconstruction, not just sample-to-sample curvature. It remains an estimated grid bound, not continuous-time or physical cutter-head certification.</p>
     <div class="lab-controls">
       <label>Stimulus <select id="lab-scenario"><option value="lateral">1 kHz lateral</option><option value="vertical">100 Hz vertical</option><option value="mid">6 kHz left only</option><option value="left">16 kHz left only</option></select></label>
       <label>Wall reference <input id="lab-velocity" type="range" min=".05" max=".25" step=".01" value=".14"><output id="lab-velocity-value"></output></label>
       <label>Elliptical EQ <input id="lab-elliptical" type="range" min="40" max="400" step="10" value="150"><output id="lab-elliptical-value"></output></label>
-      <label>Sampled wall accel. target <input id="lab-accel" type="range" min="1000" max="20000" step="1000" value="12000"><output id="lab-accel-value"></output></label>
+      <label>Reconstructed accel. target <input id="lab-accel" type="range" min="1000" max="20000" step="1000" value="12000"><output id="lab-accel-value"></output></label>
     </div>
     <div class="lab-actions"><button id="lab-run">Run test cut</button><button id="lab-export-cut" disabled>Export cut CSV</button><span id="lab-cut-status" role="status">Run a test cut to measure groove geometry.</span></div>
     <p id="lab-cut-meta" class="lab-note"></p>
@@ -293,8 +293,9 @@
       <canvas id="lab-waveform" width="860" height="260" aria-label="Clean groove lateral and vertical displacement"></canvas>
       <canvas id="lab-pitch" width="860" height="260" aria-label="Variable groove pitch by revolution"></canvas>
     </div>
-    <p class="lab-note">Legacy vs bounded sampled wall acceleration. The horizontal target is for sampled geometry only, not continuous-time cutter-head acceleration.</p>
+    <p class="lab-note">Legacy vs guarded sampled wall acceleration. Below: bandlimited 8-phase reconstruction-grid estimate. Neither is actual cutter-head acceleration.</p>
     <canvas id="lab-acceleration" width="1720" height="290" aria-label="Legacy and corrected groove acceleration measured from output geometry"></canvas>
+    <canvas id="lab-reconstructed-acceleration" width="1720" height="290" aria-label="Legacy and guarded reconstructed groove acceleration estimates"></canvas>
   </section>
 </section>
 

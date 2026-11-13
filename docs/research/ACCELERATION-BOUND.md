@@ -1,5 +1,11 @@
 # Post-cut wall acceleration guard — 13 November 2026, round 3
 
+> Historical development record. Round 4 replaces the *default* sampled
+> second-difference constraint with an 8-phase bandlimited reconstruction-grid
+> constraint. The equations and 11,940 m/s² values below describe round 3.
+> See [RECONSTRUCTION-AND-REFERENCES.md](RECONSTRUCTION-AND-REFERENCES.md)
+> for the current implementation.
+
 ## Scope, invariants and the actual limit
 
 The existing Vinyl GL `deEss()` in `src/cut.js` predicts high-frequency

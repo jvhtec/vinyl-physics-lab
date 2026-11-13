@@ -9,6 +9,8 @@
 Research, first-stage validation and open questions: [docs/research/FOUNDATION.md](docs/research/FOUNDATION.md).
 The engineering workbench and its measured limits: [docs/research/LAB-WORKBENCH.md](docs/research/LAB-WORKBENCH.md).
 The post-cut sampled acceleration limiter and fidelity A/B: [docs/research/ACCELERATION-BOUND.md](docs/research/ACCELERATION-BOUND.md).
+Reconstruction-aware acceleration and installed plugin RE evidence: [docs/research/RECONSTRUCTION-AND-REFERENCES.md](docs/research/RECONSTRUCTION-AND-REFERENCES.md).
+Reproducible REAPER/Waves/SimuLathe black-box test scripts: [scripts/reference-probe/](scripts/reference-probe/).
 Development handoff: [docs/HANDOFF-2026-11-13.md](docs/HANDOFF-2026-11-13.md).
 This repository is an upstream-linked **public fork**. A sparse source checkout may omit
 `assets/` and `records/`: `npm test` still works, but `npm run build` requires
@@ -44,11 +46,11 @@ works without the multi-hundred-megabyte precompiled media checkout. The
 regular site still uses the original record shelf. This lab is **not**
 calibrated to cutter-head hardware or a lacquer manufacturing process.
 The upstream de-esser does **not** enforce a hard output acceleration ceiling.
-This fork now applies a **separate post-cut guard** by default, bounding
-second-difference acceleration on the sampled geometry. For historical A/B,
+This fork now applies a **separate post-cut guard** by default, bounding an
+8-phase windowed-sinc reconstruction estimate with additional margin. For historical A/B,
 use the documented `cut(..., { accelMode: 'legacy' })` option. The new
-guard does **not** guarantee intersample/continuous-time acceleration or
-safe physical cutting.
+guard still does **not** mathematically certify all intersample times or
+safe physical cutting. It is a bounded, explicitly defined digital estimate.
 
 A record player simulated "from the groove up" in the browser: **[vinyl-gl.vercel.app](https://vinyl-gl.vercel.app)**.
 

@@ -4,6 +4,7 @@
 // radius table. Sample index i <-> groove angle theta = 2*pi*i/spr <-> time i/fs at 33 1/3 rpm.
 import { TAU, T1, T2, T3, G1K, onePole } from './dsp.js';
 import { boundWallAcceleration, maxWallAcceleration } from './acceleration-guard.js';
+import { peakReconstructedAcceleration } from './reconstructed-acceleration.js';
 import {
   REV_SECONDS, R_LEADIN, R_PROGRAM, R_PROGRAM_MIN, R_LOCK, GROOVE_W, LAND_MIN, TAB_PER_REV,
 } from './geometry.js';
@@ -137,8 +138,15 @@ export function cut(tracks, fs, o = {}) {
         peakAfter: null, target: aMax,
         highGain: 1, uniformGain: 1, attenuationDb: 0 }
     : boundWallAcceleration(xa, xb, fs, aMax,
-      { mode: o.accelMode === 'uniform' ? 'uniform' : 'selective' });
-  if (acceleration.mode === 'legacy') acceleration.peakAfter = acceleration.peakBefore;
+      { mode: o.accelMode === 'uniform' ? 'uniform' : 'selective',
+        domain: o.accelDomain ?? 'reconstructed' });
+  if (acceleration.mode === 'legacy') {
+    acceleration.peakAfter = acceleration.peakBefore;
+    acceleration.sampledBefore = acceleration.sampledAfter = acceleration.peakBefore;
+    acceleration.reconstructedBefore = acceleration.reconstructedAfter =
+      peakReconstructedAcceleration(xa, xb, fs).peak;
+    acceleration.domain = 'legacy';
+  }
 
   // --- variable pitch: pack the spiral using one revolution of preview ---
   const revsP = Math.ceil(P / spr);

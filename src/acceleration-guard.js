@@ -17,6 +17,7 @@
 // sub-band does not itself introduce modulation products into a steady tone.
 
 import { onePole } from './dsp.js';
+import { accelerationKernels, forEachReconstructedAcceleration, peakReconstructedAcceleration } from './reconstructed-acceleration.js';
 
 export function maxWallAcceleration(left, right, fs) {
   if (!Number.isFinite(fs) || fs <= 0 || left.length !== right.length) {
@@ -75,8 +76,25 @@ function intersectGainRange(source, low, fs2, bound, interval) {
   }
 }
 
-function uniformReduce(left, right, fs, target, ratio = 0.999) {
-  let gain = 1, peak = maxWallAcceleration(left, right, fs).peak;
+function intersectReconstructedRange(source, low, fs, spec, bound, interval) {
+  // The source and its low-band estimate are reconstructed by the same
+  // linear kernels. Their difference defines the high-band acceleration.
+  forEachReconstructedAcceleration(source, low, fs, spec, (_index, _phase, raw, base) => {
+    const high = raw - base;
+    if (Math.abs(high) < 1e-10) {
+      if (Math.abs(base) > bound) { interval.feasible = false; return false; }
+      return true;
+    }
+    const g0 = (-bound - base) / high, g1 = (bound - base) / high;
+    interval.min = Math.max(interval.min, Math.min(g0, g1));
+    interval.max = Math.min(interval.max, Math.max(g0, g1));
+    if (interval.max < interval.min) { interval.feasible = false; return false; }
+    return true;
+  });
+}
+
+function uniformReduce(left, right, fs, target, metric, ratio = 0.999) {
+  let gain = 1, peak = metric(left, right, fs).peak;
   // Float32 arithmetic can move a limiting sample by a few ULPs, hence
   // repeated audited checks with a small reserve rather than assuming exact
   // mathematical scaling survives rounding.
@@ -84,31 +102,48 @@ function uniformReduce(left, right, fs, target, ratio = 0.999) {
     const g = (target / peak) * ratio;
     for (const x of [left, right]) for (let i = 0; i < x.length; i++) x[i] *= g;
     gain *= g;
-    peak = maxWallAcceleration(left, right, fs).peak;
+    peak = metric(left, right, fs).peak;
   }
   if (peak > target) throw new RangeError('Failed to bound output wall acceleration');
   return { gain, peak };
 }
 
-export function boundWallAcceleration(left, right, fs, aMax, { cornerHz = 3000, mode = 'selective' } = {}) {
+export function boundWallAcceleration(left, right, fs, aMax, {
+  cornerHz = 3000, mode = 'selective', domain = 'reconstructed',
+  reconstructionPhases = 8, reconstructionRadius = 16,
+} = {}) {
   if (![fs, aMax, cornerHz].every(Number.isFinite) || fs <= 0 || aMax <= 0 ||
       cornerHz <= 0 || cornerHz >= fs / 2 || left.length !== right.length ||
-      !['selective', 'uniform'].includes(mode)) {
+      !['selective', 'uniform'].includes(mode) ||
+      !['sampled', 'reconstructed'].includes(domain)) {
     throw new RangeError('Invalid acceleration guard settings');
   }
-  const before = maxWallAcceleration(left, right, fs).peak;
+  const spec = domain === 'reconstructed'
+    ? accelerationKernels({ phases: reconstructionPhases, radius: reconstructionRadius }) : null;
+  const metric = domain === 'reconstructed'
+    ? (a, b, rate) => peakReconstructedAcceleration(a, b, rate, spec)
+    : maxWallAcceleration;
+  const before = metric(left, right, fs).peak;
+  const sampledBefore = domain === 'sampled' ? before : maxWallAcceleration(left, right, fs).peak;
   const info = {
-    mode: 'identity', peakBefore: before, peakAfter: before, target: aMax,
+    mode: 'identity', domain, peakBefore: before, peakAfter: before, target: aMax,
+    sampledBefore, sampledAfter: sampledBefore, reconstructedBefore: domain === 'reconstructed' ? before : null,
+    reconstructedAfter: domain === 'reconstructed' ? before : null,
+    reconstructionPhases: spec?.phases ?? null, reconstructionRadius: spec?.radius ?? null,
     highGain: 1, uniformGain: 1, attenuationDb: 0, cornerHz,
   };
-  if (before <= aMax * 0.995) return info;
-  const bound = aMax * 0.995, fs2 = fs * fs;
+  // A fractional grid is not a mathematical continuous-time supremum. The
+  // 2.5% reserve allows for inter-grid peaks and residual FIR approximation
+  // error (while still not pretending to guarantee physical cutter safety).
+  if (before <= aMax * 0.975) return info;
+  const bound = aMax * 0.975, fs2 = fs * fs;
   let filtered = false, highGain = 1;
   if (mode === 'selective') {
     const interval = { min: 0, max: 1, feasible: true };
     for (const channel of [left, right]) {
       const low = zeroPhaseLowpass(channel, fs, cornerHz);
-      intersectGainRange(channel, low, fs2, bound, interval);
+      if (domain === 'reconstructed') intersectReconstructedRange(channel, low, fs, spec, bound, interval);
+      else intersectGainRange(channel, low, fs2, bound, interval);
       if (!interval.feasible) break;
     }
     if (interval.feasible && interval.max >= 0) {
@@ -124,11 +159,13 @@ export function boundWallAcceleration(left, right, fs, aMax, { cornerHz = 3000, 
       }
     }
   }
-  const result = uniformReduce(left, right, fs, aMax);
+  const result = uniformReduce(left, right, fs, aMax, metric);
   info.mode = filtered ? (result.gain < 1 ? 'selective+reserve' : 'selective') : 'uniform';
   info.highGain = filtered ? highGain : 1;
   info.uniformGain = result.gain;
   info.peakAfter = result.peak;
+  info.sampledAfter = domain === 'sampled' ? result.peak : maxWallAcceleration(left, right, fs).peak;
+  info.reconstructedAfter = domain === 'reconstructed' ? result.peak : null;
   info.attenuationDb = -20 * Math.log10(info.highGain * info.uniformGain);
   return info;
 }

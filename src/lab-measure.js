@@ -3,6 +3,7 @@
 import { TAU } from './dsp.js';
 import { grooveRadius, LAND_MIN } from './geometry.js';
 import { cartridgeBiquad, cartridgeResponse, electricalConstants, MM_ELECTRICAL_PRESETS } from './cartridge-electrical.js';
+import { accelerationKernels, reconstructedAccelerationAt } from './reconstructed-acceleration.js';
 
 // This evaluates the exact digital network used by Engine (an oversampled bilinear
 // biquad), not an approximate plot of the analogue prototype.
@@ -240,17 +241,29 @@ export function accelerationOverlay(legacy, bounded, { windowMs = 6, points = 51
   const count = Math.max(2, Math.round(windowMs * 0.001 * fs));
   const stride = Math.max(1, Math.ceil(count / points));
   const rows = [];
+  const kernels = accelerationKernels();
   const accel = (rec, i) => {
     const { wallIn: a, wallOut: b } = rec;
     return Math.max(
       Math.abs((a[i + 1] - 2 * a[i] + a[i - 1]) * fs * fs),
       Math.abs((b[i + 1] - 2 * b[i] + b[i - 1]) * fs * fs));
   };
+  const reconstructed = (rec, i) => {
+    let peak = 0;
+    for (let p = 0; p < kernels.phases; p++) {
+      peak = Math.max(peak,
+        Math.abs(reconstructedAccelerationAt(rec.wallIn, fs, i, p, kernels)),
+        Math.abs(reconstructedAccelerationAt(rec.wallOut, fs, i, p, kernels)));
+    }
+    return peak;
+  };
   for (let j = 0; j < count; j += stride) {
     const i = from + j;
     rows.push({ timeMs: j * 1000 / fs,
       legacyAcceleration: accel(legacy, i),
       boundedAcceleration: accel(bounded, i),
+      legacyReconstructed: reconstructed(legacy, i),
+      boundedReconstructed: reconstructed(bounded, i),
       targetAcceleration: bounded.acceleration?.target ?? null });
   }
   return rows;
